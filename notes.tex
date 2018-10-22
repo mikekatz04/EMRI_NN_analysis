@@ -1,0 +1,60 @@
+\documentclass[aps,notitlepage,onecolumn]{revtex4-1}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{subfig}
+
+\begin{document}
+
+\title{Notes on inference with Bayesian neural networks}
+\maketitle
+
+The standard Bayesian posterior probability in gravitational-wave parameter estimation is a statement about the parameters $\theta$ of a source model $\mathcal{M}$, given the detector data $x$ and some assumption $\mathcal{N}$ about the detector noise, i.e.
+\begin{equation}\label{eq:modelposterior}
+p(\theta|x,\mathcal{M},\mathcal{N})\propto p(x|\theta,\mathcal{M},\mathcal{N})p(\theta|\mathcal{M}).
+\end{equation}
+This last assumption is often implicit, with the detector noise taken as Gaussian in the likelihood
+\begin{equation}
+L(\theta):=p(x|\theta,\mathcal{M},\mathcal{N}).
+\end{equation}
+By specifying an astrophysically appropriate prior on $\theta$, i.e.
+\begin{equation}
+\Pi(\theta):=p(\theta|\mathcal{M}),
+\end{equation}
+posterior inference is then performed by drawing samples from $L(\theta)\Pi(\theta)$, estimating the probability density of the samples, and computing credible regions for $\theta$ from the density estimate.
+
+In a Bayesian neural network, variational inference is used to learn the posterior probability of the free network parameters $\mathcal{P}$, given a training set $\mathcal{T}$ of input--output pairs and some fixed network hyperparameters $\mathcal{H}$. For any test input, the trained network then provides a probability distribution for the corresponding output, instead of a point estimate as in regular neural networks. We would like to adapt this framework for the gravitational-wave problem, i.e. by training a Bayesian neural network on the set
+\begin{equation}
+\mathcal{T}=\{(x_i,\theta_i):1\leq i\leq N\},
+\end{equation}
+such that it learns to output a probability density $p(\theta|x,\mathcal{T},\mathcal{H})$, given the input $x$. The question then is whether and how this density can be linked to the standard model posterior \eqref{eq:modelposterior}.
+
+As expected, the output density in a Bayesian neural network should depend on the posterior for $\mathcal{P}$:
+\begin{equation}\label{eq:networkposterior}
+p(\mathcal{P}|\mathcal{T},\mathcal{H})=\mathbb{E}_i[p(\mathcal{P}|x_i,\theta_i,\mathcal{H})]=\langle p(\mathcal{P}|x_i,\theta_i,\mathcal{H})\rangle_i:=p(\mathcal{P}|x_\mathcal{T},\theta_\mathcal{T},\mathcal{H}),
+\end{equation}
+where the expectation here is simply the average over all training pairs. In variational inference, the network posterior \eqref{eq:networkposterior} is approximated by some member of a family of probability densities with a specified functional form $q(\mathcal{P}|\mathcal{H})$ (typically Gaussian). This is achieved by minimizing the Kullback--Liebler (KL) divergence of $p(\mathcal{P}|\mathcal{T},\mathcal{H})$ from $q(\mathcal{P}|\mathcal{H})$, which is equivalent to maximizing the ``evidence lower bound'' (ELBO):
+\begin{align}
+\mathrm{ELBO}(q)&:=\log{p(\theta_\mathcal{T}|x_\mathcal{T})-\mathrm{KL}(q(\mathcal{P}|\mathcal{H})||p(\mathcal{P}|\mathcal{T},\mathcal{H}))}\nonumber\\
+&=\mathbb{E}_q[\log{p(\mathcal{P},\theta_\mathcal{T}|x_\mathcal{T},\mathcal{H})}]-\mathbb{E}_q[\log{q(\mathcal{P}|\mathcal{H})}]\nonumber\\
+&=\mathbb{E}_q[\log{p(\theta_\mathcal{T}|x_\mathcal{T},\mathcal{H},\mathcal{P})}]+\mathbb{E}_q[\log{p(\mathcal{P}|\mathcal{H})}]-\mathbb{E}_q[\log{q(\mathcal{P}|\mathcal{H})}]\nonumber\\
+&=\mathbb{E}_q[\log{p(\theta_\mathcal{T}|x_\mathcal{T},\mathcal{H},\mathcal{P})}]-\mathrm{KL}(q(\mathcal{P}|\mathcal{H})||p(\mathcal{P}|\mathcal{H})),
+\end{align}
+where all expectations are taken with respect to $q(\mathcal{P}|\mathcal{H})$. The first term on the final line is the expected log-likelihood for $\mathcal{P}$, in which the functional form $p(\theta|x,\mathcal{H},\mathcal{P})$ must be specified as well. Regularization is provided by the positive second term, which is the KL divergence of the prior $p(\mathcal{P}|\mathcal{H})$ from the approximate posterior $q(\mathcal{P}|\mathcal{H})$.
+
+After the Bayesian neural network is trained, we then have
+\begin{equation}
+p(\mathcal{P}|\mathcal{T},\mathcal{H})\approx q_*(\mathcal{P}|\mathcal{T},\mathcal{H}),
+\end{equation}
+where $q_*(\mathcal{P}|\mathcal{T},\mathcal{H})$ is the solution to the optimization problem. Given a test input $x$, the output from a single realization of the network is $p(\theta|x,\mathcal{T},\mathcal{H},\mathcal{P})$. The final step is to compute the desired probability density
+\begin{align}\label{eq:trainedmodelposterior}
+p(\theta|x,\mathcal{T},\mathcal{H})&=\int d\mathcal{P}\,p(\theta|x,\mathcal{T},\mathcal{H},\mathcal{P})p(\mathcal{P}|\mathcal{T},\mathcal{H})\nonumber\\
+&\approx\int d\mathcal{P}\,p(\theta|x,\mathcal{T},\mathcal{H},\mathcal{P})q_*(\mathcal{P}|\mathcal{T},\mathcal{H})\nonumber\\
+&\approx\frac{1}{n}\sum_{i=1}^np(\theta|x,\mathcal{T},\mathcal{H},\mathcal{P}_i),
+\end{align}
+where the $\mathcal{P}_i$ are distributed with probability $q_*(\mathcal{P}|\mathcal{T},\mathcal{H})$, i.e. they are Monte Carlo draws from the trained network.
+
+The ``trained model posterior'' \eqref{eq:trainedmodelposterior} is manifestly a mixture distribution, and so is less reliant on the form $p(\theta|x,\mathcal{H},\mathcal{P})$ for large $n$ and a well-trained network. It is also straightforward to construct a training set $\mathcal{T}(\mathcal{M},\mathcal{N})$ under the model and noise assumptions in the standard posterior \eqref{eq:modelposterior}, such that $p(\theta|x,\mathcal{T},\mathcal{H})\approx p(\theta|x,\mathcal{M},\mathcal{N},\mathcal{H})$ for large $N$. However, the trained posterior must realistically depend on an assumption about the network hyperparameters $\mathcal{H}$; it is not immediately clear that $\mathcal{H}$ may always be chosen such that $p(\theta|x,\mathcal{T},\mathcal{H})\approx p(\theta|x,\mathcal{M},\mathcal{N})$. This might necessitate the empirical validation of network architectures against the standard framework, and requires further investigation.
+
+\end{document}
